@@ -22,7 +22,7 @@ print("Feature data loaded")
 df.show(5)
 
 assembler = VectorAssembler(
-    inputCols=["day_of_week", "month", "lag_1"],
+    inputCols=["hour", "day_of_week", "month"] + [f"lag_{i}" for i in range(1, 25)],
     outputCol="features"
 )
 
@@ -46,10 +46,10 @@ print(f"Model loaded successfully: {model_name} ({model_path})")
 predictions = model.transform(df_features)
 
 result = predictions.select(
-    "date",
+    "datetime",
     col("pm25").alias("actual_pm25"),
     col("prediction").alias("predicted_pm25")
-)
+).withColumnRenamed("datetime", "date")
 
 result.show(10)
 

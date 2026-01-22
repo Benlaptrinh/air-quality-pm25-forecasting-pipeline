@@ -49,28 +49,32 @@ def to_utc_iso(dt):
 def fetch_measurements(sensor_id, interval="hourly", page=1, limit=100):
     """
     Fetch measurements from OpenAQ API
-    
+
     Args:
         sensor_id: OpenAQ sensor ID
         interval: 'hourly' or 'daily'
         page: Page number
         limit: Records per page (max 100)
-    
+
     Returns:
         dict: API response
     """
-    url = f"{BASE_URL}/sensors/{sensor_id}/measurements/{interval}"
-    
+    url = f"{BASE_URL}/sensors/{sensor_id}/measurements"
+
     params = {
         "limit": limit,
-        "page": page
+        "page": page,
+        "interval": interval  # hourly or daily as query param
     }
-    
+
     if DATE_FROM:
         params["datetime_from"] = to_utc_iso(DATE_FROM)
     if DATE_TO:
         params["datetime_to"] = to_utc_iso(DATE_TO)
-    
+
+    print(f"   URL: {url}")
+    print(f"   Params: {params}")
+
     response = requests.get(url, headers=HEADERS, params=params, timeout=60)
     response.raise_for_status()
     return response.json()

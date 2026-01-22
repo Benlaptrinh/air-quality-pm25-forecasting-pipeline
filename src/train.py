@@ -119,58 +119,47 @@ print(f"   RMSE: {lr_metrics['rmse']:.2f}")
 print(f"   MAE: {lr_metrics['mae']:.2f}")
 print(f"   R²: {lr_metrics['r2']:.4f}")
 
-# -----------------------
-# Train Random Forest Regressor
-# -----------------------
-print("\n🌲 Training Random Forest...")
-rf = RandomForestRegressor(
-    featuresCol="features",
-    labelCol="pm25",
-    numTrees=100,  # More trees for better performance
-    maxDepth=10,   # Deeper trees
-    seed=42
-)
+# Save Linear Regression model
+print("\n💾 Saving Linear Regression model...")
+lr_model.write().overwrite().save(LR_MODEL_PATH)
+print(f"   ✅ Linear Regression: {LR_MODEL_PATH}")
 
-rf_model = rf.fit(train_df)
-rf_predictions = rf_model.transform(test_df)
-rf_metrics = evaluate_metrics(rf_predictions)
-
-print(f"   RMSE: {rf_metrics['rmse']:.2f}")
-print(f"   MAE: {rf_metrics['mae']:.2f}")
-print(f"   R²: {rf_metrics['r2']:.4f}")
+# -----------------------
+# Train Random Forest Regressor (SKIPPED - Out of Memory)
+# -----------------------
+# print("\n🌲 Training Random Forest...")
+# rf = RandomForestRegressor(
+#     featuresCol="features",
+#     labelCol="pm25",
+#     numTrees=100,
+#     maxDepth=10,
+#     seed=42
+# )
+# rf_model = rf.fit(train_df)
+# rf_predictions = rf_model.transform(test_df)
+# rf_metrics = evaluate_metrics(rf_predictions)
+# print(f"   RMSE: {rf_metrics['rmse']:.2f}")
+# print(f"   MAE: {rf_metrics['mae']:.2f}")
+# print(f"   R²: {rf_metrics['r2']:.4f}")
 
 # -----------------------
 # Results Summary
 # -----------------------
 print("\n" + "=" * 60)
-print("📊 MODEL COMPARISON")
+print("📊 MODEL RESULTS")
 print("=" * 60)
 print(f"{'Model':<25} {'RMSE':>10} {'MAE':>10} {'R²':>10}")
 print("-" * 60)
 print(f"{'Linear Regression':<25} {lr_metrics['rmse']:>10.2f} {lr_metrics['mae']:>10.2f} {lr_metrics['r2']:>10.4f}")
-print(f"{'Random Forest':<25} {rf_metrics['rmse']:>10.2f} {rf_metrics['mae']:>10.2f} {rf_metrics['r2']:>10.4f}")
 print("=" * 60)
-
-# Determine best model
-best_model = "Linear Regression" if lr_metrics['rmse'] < rf_metrics['rmse'] else "Random Forest"
-print(f"🏆 Best Model: {best_model}")
-
-# -----------------------
-# Save models
-# -----------------------
+print(f"🏆 Best Model: Linear Regression")
 print("\n💾 Saving models...")
 lr_model.write().overwrite().save(LR_MODEL_PATH)
 print(f"   Linear Regression: {LR_MODEL_PATH}")
 
-rf_model.write().overwrite().save(RF_MODEL_PATH)
-print(f"   Random Forest: {RF_MODEL_PATH}")
-
-# -----------------------
 # Save metrics
-# -----------------------
 metrics_rows = [
-    ("linear_regression", lr_metrics["rmse"], lr_metrics["mae"], lr_metrics["r2"]),
-    ("random_forest", rf_metrics["rmse"], rf_metrics["mae"], rf_metrics["r2"])
+    ("linear_regression", lr_metrics["rmse"], lr_metrics["mae"], lr_metrics["r2"])
 ]
 
 metrics_df = spark.createDataFrame(
@@ -181,16 +170,5 @@ metrics_df = spark.createDataFrame(
 metrics_df.write.mode("overwrite").parquet(METRICS_PATH)
 print(f"   Metrics: {METRICS_PATH}")
 
-# -----------------------
-# Feature Importance (Random Forest)
-# -----------------------
-print("\n🔍 Top 10 Feature Importance (Random Forest):")
-importances = rf_model.featureImportances.toArray()
-feature_importance = list(zip(feature_cols, importances))
-feature_importance.sort(key=lambda x: x[1], reverse=True)
-
-for i, (feat, imp) in enumerate(feature_importance[:10]):
-    print(f"   {i+1:2}. {feat:<12}: {imp:.4f}")
-
-print("\n✅ TRAINING COMPLETE!")
+print("\n✅ TRAINING COMPLETE! (Random Forest skipped due to memory constraints)")
 spark.stop()

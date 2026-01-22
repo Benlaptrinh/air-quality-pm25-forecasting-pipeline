@@ -8,7 +8,7 @@ ETL Pipeline for PM2.5 Data
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, lit, to_timestamp, avg, hour, dayofweek, month,
-    when, isnan, isnull
+    when, isnan, isnull, date_add
 )
 import os
 
@@ -48,7 +48,11 @@ print(f"   Found {len(raw_files)} raw files")
 dfs = []
 for f in raw_files:
     filepath = os.path.join(RAW_DIR, f)
-    df_temp = spark.read.json(filepath)
+    # Read with multiLine option for proper JSON parsing
+    df_temp = spark.read \
+        .option("multiLine", "true") \
+        .option("mode", "PERMISSIVE") \
+        .json(filepath)
     dfs.append(df_temp)
     
 df_raw = dfs[0]
@@ -65,14 +69,14 @@ print("\n🔧 Normalizing schema...")
 # OpenAQ response structure varies, try different paths
 # Handle nested structure from our ingest script
 if "results" in df_raw.columns:
-    df_expanded = df_raw.selectExpr("explode(results) as r")
+    df_expanded = df_raw.selectExpr("explode(results) as r", "sensor_id")
     
     df_normalized = df_expanded.select(
         col("r.value").alias("pm25"),
         to_timestamp(col("r.period.datetimeTo.utc")).alias("datetime"),
         col("r.parameter.name").alias("parameter"),
         col("r.period.label").alias("period_label"),
-        df_raw.sensor_id.alias("sensor_id") if "sensor_id" in df_raw.columns else lit("unknown").alias("sensor_id")
+        col("sensor_id")
     )
 else:
     # Direct structure
@@ -112,18 +116,20 @@ print(f"   ✅ Saved to: {OUTPUT_CLEAN}")
 # -----------------------
 print("\n⏰ Aggregating to hourly (this increases data size)...")
 
-df_hourly = df_clean.groupBy(
+# Vì data đã là hourly từ API, nên KHÔNG cần aggregate lại!
+# Chỉ cần select các columns cần thiết
+from pyspark.sql.functions import date_format
+
+df_hourly = df_clean.select(
     "sensor_id",
+    "datetime",
     hour("datetime").alias("hour"),
     dayofweek("datetime").alias("day_of_week"),
-    month("datetime").alias("month")
-).agg(
-    avg("pm25").alias("pm25"),
-    to_timestamp(
-        date_add(to_timestamp(col("datetime"), "yyyy-MM-dd"), 0) +
-        (hour("datetime") * 3600)
-    ).alias("datetime")
+    month("datetime").alias("month"),
+    "pm25"
 )
+
+df_hourly = df_hourly.orderBy("sensor_id", "datetime")
 
 # Reorder columns
 df_hourly = df_hourly.select(
