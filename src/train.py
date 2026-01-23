@@ -7,7 +7,7 @@ Training Pipeline for PM2.5 Prediction
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 from pyspark.ml.feature import VectorAssembler
-from pyspark.ml.regression import LinearRegression, RandomForestRegressor
+from pyspark.ml.regression import LinearRegression
 from pyspark.ml.evaluation import RegressionEvaluator
 
 # -----------------------
