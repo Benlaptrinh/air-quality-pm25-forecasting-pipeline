@@ -55,6 +55,7 @@ st.sidebar.header("AQI PM2.5 Demo")
 show_raw_tables = st.sidebar.checkbox("Show raw tables", value=False)
 max_pred_rows = st.sidebar.slider("Prediction rows", min_value=50, max_value=1000, value=200, step=50)
 enable_forecast = st.sidebar.checkbox("Enable next-hour forecast", value=True)
+use_full_predictions = st.sidebar.checkbox("Use full predictions (slow)", value=False)
 
 # -----------------------
 # Main
@@ -164,7 +165,7 @@ if PRED_DIR.exists():
 
         df_pred = df_pred.sort_values("date")
 
-    if len(df_pred) > max_pred_rows:
+    if not use_full_predictions and len(df_pred) > max_pred_rows:
         df_pred = df_pred.tail(max_pred_rows)
 
     cols = [c for c in ["actual_pm25", "predicted_pm25"] if c in df_pred.columns]
@@ -247,7 +248,7 @@ else:
         c1, c2, c3 = st.columns(3)
         c1.metric("Forecast (t+1)", f"{pred:.3f}")
         c2.metric("Last observed pm25", f"{last_pm25:.3f}")
-        c3.metric("Forecast time", str(next_dt))
+        c3.metric("Next hour (t+1)", str(next_dt))
 
         st.caption(
             "Forecast uses the latest available timestamp and shifts lag features for one-step-ahead prediction."
