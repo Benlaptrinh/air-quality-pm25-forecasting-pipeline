@@ -125,21 +125,36 @@ with col_right:
     else:
         st.info("Weekly trend not found. Run EDA.")
 
-st.subheader("Weekday Statistics")
-if WEEKDAY_STATS_DIR.exists():
-    df_weekday = read_parquet(WEEKDAY_STATS_DIR)
-    if "day_of_week" in df_weekday.columns:
-        df_weekday["day_label"] = df_weekday["day_of_week"].apply(day_of_week_label)
-        df_weekday["day_label"] = pd.Categorical(
-            df_weekday["day_label"], categories=WEEKDAY_ORDER, ordered=True
-        )
-        df_weekday = df_weekday.sort_values("day_label")
-    if "pm25_avg" in df_weekday.columns:
-        st.bar_chart(df_weekday.set_index("day_label")["pm25_avg"])
-    if show_raw_tables:
-        st.dataframe(df_weekday, use_container_width=True)
+
+# -----------------------
+# Yearly View
+# -----------------------
+st.subheader("Yearly PM2.5 View")
+if DAILY_TREND_DIR.exists():
+    df_daily = read_parquet(DAILY_TREND_DIR)
+    if "date" in df_daily.columns:
+        df_daily["date"] = pd.to_datetime(df_daily["date"])
+        df_daily["year"] = df_daily["date"].dt.year
+        df_daily["month"] = df_daily["date"].dt.month
+
+        years = sorted(df_daily["year"].dropna().unique().tolist())
+        if years:
+            selected_year = st.selectbox("Select year", years, index=len(years) - 1)
+            df_year = df_daily[df_daily["year"] == selected_year].copy()
+            monthly = df_year.groupby("month", as_index=False)["pm25_avg"].mean()
+            monthly = monthly.sort_values("month")
+
+            st.line_chart(monthly.set_index("month")["pm25_avg"])
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Year avg", f"{df_year['pm25_avg'].mean():.2f}")
+            c2.metric("Year max", f"{df_year['pm25_avg'].max():.2f}")
+            c3.metric("Year min", f"{df_year['pm25_avg'].min():.2f}")
+        else:
+            st.info("No year data available.")
+    else:
+        st.info("Daily trend missing 'date' column.")
 else:
-    st.info("Weekday stats not found. Run EDA.")
+    st.info("Daily trend not found. Run EDA.")
 
 st.divider()
 
