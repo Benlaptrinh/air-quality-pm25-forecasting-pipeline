@@ -21,6 +21,8 @@ WEEKLY_TREND_DIR = DATA_DIR / "eda" / "weekly_trend"
 WEEKDAY_STATS_DIR = DATA_DIR / "eda" / "weekday_stats"
 METRICS_DIR = DATA_DIR / "model_metrics"
 PRED_DIR = DATA_DIR / "predictions"
+FEATURES_DIR = DATA_DIR / "features"
+MODEL_DIR = BASE_DIR / "models" / "pm25_lr_model"
 
 # -----------------------
 # Helpers
@@ -46,13 +48,13 @@ def day_of_week_label(d: int) -> str:
 
 WEEKDAY_ORDER = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-
 # -----------------------
 # Sidebar
 # -----------------------
 st.sidebar.header("AQI PM2.5 Demo")
 show_raw_tables = st.sidebar.checkbox("Show raw tables", value=False)
 max_pred_rows = st.sidebar.slider("Prediction rows", min_value=50, max_value=1000, value=200, step=50)
+enable_forecast = st.sidebar.checkbox("Enable next-hour forecast", value=True)
 
 # -----------------------
 # Main
@@ -171,5 +173,86 @@ if PRED_DIR.exists():
     st.dataframe(df_pred.head(50), use_container_width=True)
 else:
     st.info("Predictions not found. Run prediction step.")
+
+st.divider()
+
+# -----------------------
+# Next-hour forecast (t+1)
+# -----------------------
+st.subheader("Next-hour Forecast (t+1)")
+if not enable_forecast:
+    st.info("Forecast is disabled in the sidebar.")
+elif not FEATURES_DIR.exists() or not MODEL_DIR.exists():
+    st.warning("Forecast requires features and a trained model.")
+else:
+    try:
+        with st.spinner("Computing forecast..."):
+            from datetime import timedelta
+            from pyspark.sql import SparkSession
+            from pyspark.sql.functions import col
+            from pyspark.ml.feature import VectorAssembler
+            from pyspark.ml.regression import LinearRegressionModel
+
+            @st.cache_resource(show_spinner=False)
+            def get_spark() -> SparkSession:
+                spark = (
+                    SparkSession.builder
+                    .appName("pm25-forecast")
+                    .master("local[1]")
+                    .config("spark.ui.enabled", "false")
+                    .config("spark.driver.host", "127.0.0.1")
+                    .config("spark.driver.bindAddress", "127.0.0.1")
+                    .getOrCreate()
+                )
+                spark.sparkContext.setLogLevel("WARN")
+                return spark
+
+            @st.cache_resource(show_spinner=False)
+            def load_lr_model() -> LinearRegressionModel:
+                return LinearRegressionModel.load(str(MODEL_DIR))
+
+            spark = get_spark()
+            model = load_lr_model()
+
+            df_feat = spark.read.parquet(str(FEATURES_DIR))
+            latest = df_feat.orderBy(col("datetime").desc()).limit(1).collect()[0]
+
+            last_dt = latest["datetime"]
+            last_pm25 = float(latest["pm25"])
+
+            # Build t+1 feature row by shifting lags and advancing time
+            next_dt = last_dt + timedelta(hours=1)
+            next_hour = int(next_dt.hour)
+            next_dow = int(next_dt.isoweekday() % 7 + 1)  # Spark dayofweek (Sun=1)
+            next_month = int(next_dt.month)
+
+            row = {
+                "hour": next_hour,
+                "day_of_week": next_dow,
+                "month": next_month,
+            }
+
+            # Shift lags: lag_1 = last pm25, lag_2 = last lag_1, ...
+            row["lag_1"] = last_pm25
+            for i in range(2, 25):
+                row[f"lag_{i}"] = float(latest[f"lag_{i-1}"])
+
+            spark_row = spark.createDataFrame([row])
+            feature_cols = ["hour", "day_of_week", "month"] + [f"lag_{i}" for i in range(1, 25)]
+            assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
+            spark_row = assembler.transform(spark_row)
+
+            pred = model.transform(spark_row).collect()[0]["prediction"]
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Forecast (t+1)", f"{pred:.3f}")
+        c2.metric("Last observed pm25", f"{last_pm25:.3f}")
+        c3.metric("Forecast time", str(next_dt))
+
+        st.caption(
+            "Forecast uses the latest available timestamp and shifts lag features for one-step-ahead prediction."
+        )
+    except Exception as exc:
+        st.warning(f"Forecast unavailable: {exc}")
 
 st.caption("Tip: run the pipeline to refresh outputs before demo.")
