@@ -44,6 +44,9 @@ def day_of_week_label(d: int) -> str:
     return mapping.get(int(d), str(d))
 
 
+WEEKDAY_ORDER = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+
 # -----------------------
 # Sidebar
 # -----------------------
@@ -91,6 +94,7 @@ with col_left:
         df_daily = read_parquet(DAILY_TREND_DIR)
         if "date" in df_daily.columns:
             df_daily["date"] = pd.to_datetime(df_daily["date"])
+            df_daily = df_daily.sort_values("date")
         chart_cols = [c for c in ["pm25_avg", "pm25_avg_7d"] if c in df_daily.columns]
         if chart_cols:
             st.line_chart(df_daily.set_index("date")[chart_cols])
@@ -104,7 +108,13 @@ with col_right:
     if WEEKLY_TREND_DIR.exists():
         df_weekly = read_parquet(WEEKLY_TREND_DIR)
         if {"year", "week_of_year"}.issubset(df_weekly.columns):
-            df_weekly["year_week"] = df_weekly["year"].astype(str) + "-" + df_weekly["week_of_year"].astype(str)
+            df_weekly["week_of_year"] = df_weekly["week_of_year"].astype(int)
+            df_weekly["year_week"] = (
+                df_weekly["year"].astype(int).astype(str)
+                + "-"
+                + df_weekly["week_of_year"].astype(int).map(lambda x: f"{x:02d}")
+            )
+            df_weekly = df_weekly.sort_values(["year", "week_of_year"])
             if "pm25_avg" in df_weekly.columns:
                 st.line_chart(df_weekly.set_index("year_week")["pm25_avg"])
         if show_raw_tables:
@@ -117,6 +127,10 @@ if WEEKDAY_STATS_DIR.exists():
     df_weekday = read_parquet(WEEKDAY_STATS_DIR)
     if "day_of_week" in df_weekday.columns:
         df_weekday["day_label"] = df_weekday["day_of_week"].apply(day_of_week_label)
+        df_weekday["day_label"] = pd.Categorical(
+            df_weekday["day_label"], categories=WEEKDAY_ORDER, ordered=True
+        )
+        df_weekday = df_weekday.sort_values("day_label")
     if "pm25_avg" in df_weekday.columns:
         st.bar_chart(df_weekday.set_index("day_label")["pm25_avg"])
     if show_raw_tables:
@@ -136,9 +150,10 @@ if PRED_DIR.exists():
     # Normalize column names if needed
     if "date" in df_pred.columns:
         df_pred["date"] = pd.to_datetime(df_pred["date"])
+        df_pred = df_pred.dropna(subset=["date"]).sort_values("date")
 
     if len(df_pred) > max_pred_rows:
-        df_pred = df_pred.sample(n=max_pred_rows, random_state=42)
+        df_pred = df_pred.tail(max_pred_rows)
 
     cols = [c for c in ["actual_pm25", "predicted_pm25"] if c in df_pred.columns]
     if cols:
