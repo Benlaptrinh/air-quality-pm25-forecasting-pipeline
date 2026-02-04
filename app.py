@@ -150,7 +150,17 @@ if PRED_DIR.exists():
     # Normalize column names if needed
     if "date" in df_pred.columns:
         df_pred["date"] = pd.to_datetime(df_pred["date"])
-        df_pred = df_pred.dropna(subset=["date"]).sort_values("date")
+        df_pred = df_pred.dropna(subset=["date"])
+
+        # Aggregate duplicates (multiple sensors may share the same timestamp)
+        agg_cols = [c for c in ["actual_pm25", "predicted_pm25"] if c in df_pred.columns]
+        if agg_cols:
+            df_pred = (
+                df_pred.groupby("date", as_index=False)[agg_cols]
+                .mean()
+            )
+
+        df_pred = df_pred.sort_values("date")
 
     if len(df_pred) > max_pred_rows:
         df_pred = df_pred.tail(max_pred_rows)
