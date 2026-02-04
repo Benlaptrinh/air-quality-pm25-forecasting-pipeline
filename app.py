@@ -144,7 +144,7 @@ if DAILY_TREND_DIR.exists():
             monthly = df_year.groupby("month", as_index=False)["pm25_avg"].mean()
             monthly = monthly.sort_values("month")
 
-            st.line_chart(monthly.set_index("month")["pm25_avg"])
+            st.bar_chart(monthly.set_index("month")["pm25_avg"])
             c1, c2, c3 = st.columns(3)
             c1.metric("Year avg", f"{df_year['pm25_avg'].mean():.2f}")
             c2.metric("Year max", f"{df_year['pm25_avg'].max():.2f}")
