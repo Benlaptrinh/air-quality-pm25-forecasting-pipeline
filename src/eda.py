@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import avg as avg_fn, col
+from pyspark.sql.functions import avg as avg_fn, col, to_date
 from pyspark.sql.window import Window
 
 # -----------------------
@@ -26,6 +26,7 @@ OUTPUT_DIR = "data/processed/eda"
 # Load clean data
 # -----------------------
 df = spark.read.parquet(INPUT_PATH)
+df = df.withColumn("date", to_date("datetime"))
 df.createOrReplaceTempView("pm25_clean")
 
 # -----------------------
