@@ -54,7 +54,7 @@ WEEKDAY_ORDER = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 st.sidebar.header("AQI PM2.5 Demo")
 show_raw_tables = st.sidebar.checkbox("Show raw tables", value=False)
 max_pred_rows = st.sidebar.slider("Prediction rows", min_value=50, max_value=1000, value=200, step=50)
-enable_forecast = st.sidebar.checkbox("Enable next-hour forecast", value=True)
+enable_forecast = st.sidebar.checkbox("Enable next-hour PM2.5 forecast (t+1)", value=True)
 use_full_predictions = st.sidebar.checkbox("Use full predictions (slow)", value=False)
 
 # -----------------------
@@ -193,9 +193,9 @@ else:
 st.divider()
 
 # -----------------------
-# Next-hour forecast (t+1)
+# Next-hour PM2.5 forecast (t+1)
 # -----------------------
-st.subheader("Next-hour Forecast (t+1)")
+st.subheader("Next-hour PM2.5 Concentration Forecast (t+1)")
 if not enable_forecast:
     st.info("Forecast is disabled in the sidebar.")
 elif not FEATURES_DIR.exists() or not MODEL_DIR.exists():
@@ -262,11 +262,16 @@ else:
 
         c1, c2, c3 = st.columns(3)
         c1.metric("Forecast (t+1)", f"{pred:.3f}")
-        c2.metric("Last observed pm25", f"{last_pm25:.3f}")
+        c2.metric("Last observed PM2.5", f"{last_pm25:.3f}")
         c3.metric("Next hour (t+1)", str(next_dt))
 
         st.caption(
-            "Forecast uses the latest available timestamp and shifts lag features for one-step-ahead prediction."
+            "This is a one-step-ahead (t+1) forecast that includes the latest 24 PM2.5 values among its input features. "
+            "In practice, the pipeline can be scheduled to rerun hourly so the forecast refreshes whenever new data arrives."
+        )
+        st.caption(
+            "Baseline: a naive forecast simply uses the previous hour's PM2.5 as the prediction for the next hour. "
+            "Compared to this baseline, the model leverages patterns across multiple recent hours rather than a single point."
         )
     except Exception as exc:
         st.warning(f"Forecast unavailable: {exc}")
