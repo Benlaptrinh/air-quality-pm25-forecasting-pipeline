@@ -91,7 +91,7 @@ print(f"   Train: {train_count} records ({train_count/total_count*100:.1f}%)")
 print(f"   Test: {test_count} records ({test_count/total_count*100:.1f}%)")
 print(f"   Split datetime: {split_datetime}")
 
-# Check for class imbalance
+# Check ranges
 print(f"
    Train date range: {train_df.select(col('datetime')).first()[0]}")
 print(f"   Test date range: {test_df.select(col('datetime')).first()[0]}")
@@ -129,7 +129,7 @@ print("
 lr = LinearRegression(
     featuresCol="features",
     labelCol="pm25",
-    regParam=0.1  # Add regularization to prevent overfitting
+    regParam=0.1
 )
 
 lr_model = lr.fit(train_df)
@@ -140,13 +140,11 @@ print(f"   RMSE: {lr_metrics['rmse']:.2f}")
 print(f"   MAE: {lr_metrics['mae']:.2f}")
 print(f"   R²: {lr_metrics['r2']:.4f}")
 
-# Save Linear Regression model
 print("
 💾 Saving Linear Regression model...")
 lr_model.write().overwrite().save(LR_MODEL_PATH)
 print(f"   ✅ Linear Regression: {LR_MODEL_PATH}")
 
-# Save LR predictions (test set)
 save_predictions(lr_predictions, PRED_LR_PATH)
 print(f"   ✅ Predictions: {PRED_LR_PATH}")
 
