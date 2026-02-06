@@ -1,4 +1,3 @@
-
 """
 Training Pipeline for PM2.5 Prediction
 - Uses time-based split (no data leakage)
@@ -15,7 +14,12 @@ from pyspark.ml.evaluation import RegressionEvaluator
 # -----------------------
 # Spark Session
 # -----------------------
-spark = SparkSession.builder     .appName("PM25 Training Model")     .master("local[*]")     .config("spark.driver.bindAddress", "127.0.0.1")     .getOrCreate()
+spark = (SparkSession.builder
+    .appName("PM25 Training Model")
+    .master("local[*]")
+    .config("spark.driver.bindAddress", "127.0.0.1")
+    .getOrCreate()
+)
 
 spark.sparkContext.setLogLevel("WARN")
 
@@ -44,11 +48,9 @@ print(f"   Total records: {df.count()}")
 # -----------------------
 # Feature vector
 # -----------------------
-# Features: hour, day_of_week, month, lag_1..lag_24
 feature_cols = ["hour", "day_of_week", "month"] + [f"lag_{i}" for i in range(1, 25)]
 
-print(f"
-🔧 Creating feature vector with {len(feature_cols)} features:")
+print(f"\n🔧 Creating feature vector with {len(feature_cols)} features:")
 print(f"   {feature_cols}")
 
 assembler = VectorAssembler(
@@ -61,44 +63,34 @@ df = assembler.transform(df)
 # -----------------------
 # Train / Test split (Time-Series based)
 # -----------------------
-print("
-⏰ Time-based split (no data leakage)...")
+print("\n⏰ Time-based split (no data leakage)...")
 
-# Sort by datetime and drop nulls
 df_sorted = df.orderBy("datetime").dropna()
 
-# Get total count
 total_count = df_sorted.count()
 print(f"   Total valid records: {total_count}")
 
-# Calculate split point (80% for train)
 split_index = int(total_count * 0.8)
 
-# Get split datetime
 all_datetimes = df_sorted.select("datetime").orderBy("datetime").collect()
 split_datetime = all_datetimes[split_index]["datetime"]
 
-# Create train/test sets
 train_df = df_sorted.filter(col("datetime") < split_datetime)
 test_df = df_sorted.filter(col("datetime") >= split_datetime)
 
 train_count = train_df.count()
 test_count = test_df.count()
 
-print(f"
-📊 Train/Test Split:")
+print("\n📊 Train/Test Split:")
 print(f"   Train: {train_count} records ({train_count/total_count*100:.1f}%)")
 print(f"   Test: {test_count} records ({test_count/total_count*100:.1f}%)")
 print(f"   Split datetime: {split_datetime}")
 
-# Check ranges
-print(f"
-   Train date range: {train_df.select(col('datetime')).first()[0]}")
+print(f"\n   Train date range: {train_df.select(col('datetime')).first()[0]}")
 print(f"   Test date range: {test_df.select(col('datetime')).first()[0]}")
 
 
 def evaluate_metrics(predictions, label_col="pm25"):
-    """Calculate RMSE, MAE, R2"""
     metrics = {}
     for metric in ["rmse", "mae", "r2"]:
         evaluator = RegressionEvaluator(
@@ -124,8 +116,7 @@ metrics_rows = []
 # -----------------------
 # Train Linear Regression
 # -----------------------
-print("
-🚀 Training Linear Regression...")
+print("\n🚀 Training Linear Regression...")
 lr = LinearRegression(
     featuresCol="features",
     labelCol="pm25",
@@ -140,8 +131,7 @@ print(f"   RMSE: {lr_metrics['rmse']:.2f}")
 print(f"   MAE: {lr_metrics['mae']:.2f}")
 print(f"   R²: {lr_metrics['r2']:.4f}")
 
-print("
-💾 Saving Linear Regression model...")
+print("\n💾 Saving Linear Regression model...")
 lr_model.write().overwrite().save(LR_MODEL_PATH)
 print(f"   ✅ Linear Regression: {LR_MODEL_PATH}")
 
@@ -154,8 +144,7 @@ metrics_rows.append(("linear_regression", lr_metrics["rmse"], lr_metrics["mae"],
 # Train Random Forest Regressor
 # -----------------------
 if RUN_RF:
-    print("
-🌲 Training Random Forest...")
+    print("\n🌲 Training Random Forest...")
     rf = RandomForestRegressor(
         featuresCol="features",
         labelCol="pm25",
@@ -173,8 +162,7 @@ if RUN_RF:
     print(f"   MAE: {rf_metrics['mae']:.2f}")
     print(f"   R²: {rf_metrics['r2']:.4f}")
 
-    print("
-💾 Saving Random Forest model...")
+    print("\n💾 Saving Random Forest model...")
     rf_model.write().overwrite().save(RF_MODEL_PATH)
     print(f"   ✅ Random Forest: {RF_MODEL_PATH}")
 
@@ -183,15 +171,13 @@ if RUN_RF:
 
     metrics_rows.append(("random_forest", rf_metrics["rmse"], rf_metrics["mae"], rf_metrics["r2"]))
 else:
-    print("
-🌲 Random Forest skipped (RUN_RF=0)")
+    print("\n🌲 Random Forest skipped (RUN_RF=0)")
 
 # -----------------------
 # Train GBT Regressor
 # -----------------------
 if RUN_GBT:
-    print("
-🌟 Training GBT Regressor...")
+    print("\n🌟 Training GBT Regressor...")
     gbt = GBTRegressor(
         featuresCol="features",
         labelCol="pm25",
@@ -208,8 +194,7 @@ if RUN_GBT:
     print(f"   MAE: {gbt_metrics['mae']:.2f}")
     print(f"   R²: {gbt_metrics['r2']:.4f}")
 
-    print("
-💾 Saving GBT model...")
+    print("\n💾 Saving GBT model...")
     gbt_model.write().overwrite().save(GBT_MODEL_PATH)
     print(f"   ✅ GBT Regressor: {GBT_MODEL_PATH}")
 
@@ -218,14 +203,12 @@ if RUN_GBT:
 
     metrics_rows.append(("gbt_regression", gbt_metrics["rmse"], gbt_metrics["mae"], gbt_metrics["r2"]))
 else:
-    print("
-🌟 GBT Regressor skipped (RUN_GBT=0)")
+    print("\n🌟 GBT Regressor skipped (RUN_GBT=0)")
 
 # -----------------------
 # Results Summary
 # -----------------------
-print("
-" + "=" * 60)
+print("\n" + "=" * 60)
 print("📊 MODEL RESULTS")
 print("=" * 60)
 print(f"{'Model':<25} {'RMSE':>10} {'MAE':>10} {'R²':>10}")
@@ -234,7 +217,6 @@ for name, rmse, mae, r2 in metrics_rows:
     print(f"{name:<25} {rmse:>10.2f} {mae:>10.2f} {r2:>10.4f}")
 print("=" * 60)
 
-# Save metrics (merge with existing if any)
 metrics_df = spark.createDataFrame(metrics_rows, ["model", "rmse", "mae", "r2"])
 if os.path.exists(METRICS_PATH):
     try:
@@ -248,6 +230,5 @@ if os.path.exists(METRICS_PATH):
 metrics_df.write.mode("overwrite").parquet(METRICS_PATH)
 print(f"   Metrics: {METRICS_PATH}")
 
-print("
-✅ TRAINING COMPLETE!")
+print("\n✅ TRAINING COMPLETE!")
 spark.stop()
