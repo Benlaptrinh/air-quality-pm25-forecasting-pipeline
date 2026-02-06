@@ -5,6 +5,7 @@ Training Pipeline for PM2.5 Prediction
 - Uses lag_1 to lag_24 features
 """
 import os
+import shutil
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 from pyspark.ml.feature import VectorAssembler
@@ -239,6 +240,7 @@ print("=" * 60)
 metrics_df = spark.createDataFrame(metrics_rows, ["model", "rmse", "mae", "r2"])
 if os.path.exists(METRICS_PATH):
     try:
+        spark.catalog.clearCache()
         old_df = spark.read.parquet(METRICS_PATH)
         new_models = [row[0] for row in metrics_rows]
         old_df = old_df.filter(~col("model").isin(new_models))
@@ -246,7 +248,15 @@ if os.path.exists(METRICS_PATH):
     except Exception:
         pass
 
-metrics_df.write.mode("overwrite").parquet(METRICS_PATH)
+# Write to temp path then replace to avoid read/write conflict
+metrics_df = metrics_df.coalesce(1)
+_tmp_path = METRICS_PATH + "_tmp"
+if os.path.exists(_tmp_path):
+    shutil.rmtree(_tmp_path)
+metrics_df.write.mode("overwrite").parquet(_tmp_path)
+if os.path.exists(METRICS_PATH):
+    shutil.rmtree(METRICS_PATH)
+shutil.move(_tmp_path, METRICS_PATH)
 print(f"   Metrics: {METRICS_PATH}")
 
 print("\n✅ TRAINING COMPLETE!")
