@@ -18,9 +18,10 @@ DATA_DIR = BASE_DIR / "data" / "processed"
 
 DAILY_TREND_DIR = DATA_DIR / "eda" / "daily_trend"
 WEEKLY_TREND_DIR = DATA_DIR / "eda" / "weekly_trend"
-WEEKDAY_STATS_DIR = DATA_DIR / "eda" / "weekday_stats"
 METRICS_DIR = DATA_DIR / "model_metrics"
-PRED_DIR = DATA_DIR / "predictions"
+PRED_LR_DIR = DATA_DIR / "predictions"
+PRED_RF_DIR = DATA_DIR / "predictions_rf"
+PRED_GBT_DIR = DATA_DIR / "predictions_gbt"
 FEATURES_DIR = DATA_DIR / "features"
 MODEL_DIR = BASE_DIR / "models" / "pm25_lr_model"
 
@@ -70,7 +71,7 @@ st.caption("Spark pipeline outputs: EDA trends, model metrics, predictions")
 st.subheader("Model Metrics")
 if METRICS_DIR.exists():
     df_metrics = read_parquet(METRICS_DIR)
-    st.dataframe(df_metrics, use_container_width=True)
+    st.dataframe(df_metrics, width="stretch")
 
     if "r2" in df_metrics.columns:
         best = df_metrics.sort_values("r2", ascending=False).head(1)
@@ -103,7 +104,7 @@ with col_left:
         if chart_cols:
             st.line_chart(df_daily.set_index("date")[chart_cols])
         if show_raw_tables:
-            st.dataframe(df_daily.head(50), use_container_width=True)
+            st.dataframe(df_daily.head(50), width="stretch")
     else:
         st.info("Daily trend not found. Run EDA.")
 
@@ -122,7 +123,7 @@ with col_right:
             if "pm25_avg" in df_weekly.columns:
                 st.line_chart(df_weekly.set_index("year_week")["pm25_avg"])
         if show_raw_tables:
-            st.dataframe(df_weekly.head(50), use_container_width=True)
+            st.dataframe(df_weekly.head(50), width="stretch")
     else:
         st.info("Weekly trend not found. Run EDA.")
 
@@ -163,8 +164,16 @@ st.divider()
 # Predictions
 # -----------------------
 st.subheader("Predictions (Actual vs Predicted)")
-if PRED_DIR.exists():
-    df_pred = read_parquet(PRED_DIR)
+st.caption(f"Model: {pred_model}")
+pred_path_map = {
+    "Linear Regression": PRED_LR_DIR,
+    "Random Forest": PRED_RF_DIR,
+    "GBT": PRED_GBT_DIR,
+}
+pred_path = pred_path_map.get(pred_model, PRED_LR_DIR)
+
+if pred_path.exists():
+    df_pred = read_parquet(pred_path)
 
     # Normalize column names if needed
     if "date" in df_pred.columns:
@@ -187,9 +196,9 @@ if PRED_DIR.exists():
     cols = [c for c in ["actual_pm25", "predicted_pm25"] if c in df_pred.columns]
     if cols:
         st.line_chart(df_pred.set_index("date")[cols])
-    st.dataframe(df_pred.head(50), use_container_width=True)
+    st.dataframe(df_pred.head(50), width="stretch")
 else:
-    st.info("Predictions not found. Run prediction step.")
+    st.info(f"Predictions not found for {pred_model}. Run training/predict first.")
 
 st.divider()
 
