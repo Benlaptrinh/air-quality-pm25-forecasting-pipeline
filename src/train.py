@@ -38,6 +38,14 @@ PRED_GBT_PATH = "data/processed/predictions_gbt"
 RUN_RF = os.getenv("RUN_RF", "1") != "0"
 RUN_GBT = os.getenv("RUN_GBT", "1") != "0"
 
+
+TREE_SAMPLE_FRAC = float(os.getenv("TREE_SAMPLE_FRAC", "0.3"))
+RF_NUM_TREES = int(os.getenv("RF_NUM_TREES", "30"))
+RF_MAX_DEPTH = int(os.getenv("RF_MAX_DEPTH", "6"))
+RF_MAX_BINS = int(os.getenv("RF_MAX_BINS", "32"))
+GBT_MAX_ITER = int(os.getenv("GBT_MAX_ITER", "50"))
+GBT_MAX_DEPTH = int(os.getenv("GBT_MAX_DEPTH", "5"))
+
 # -----------------------
 # Load feature data
 # -----------------------
@@ -140,6 +148,17 @@ print(f"   ✅ Predictions: {PRED_LR_PATH}")
 
 metrics_rows.append(("linear_regression", lr_metrics["rmse"], lr_metrics["mae"], lr_metrics["r2"]))
 
+
+# -----------------------
+# Prepare sampled data for tree models (to avoid OOM)
+# -----------------------
+tree_train_df = train_df
+tree_test_df = test_df
+if TREE_SAMPLE_FRAC < 1.0:
+    tree_train_df = train_df.sample(withReplacement=False, fraction=TREE_SAMPLE_FRAC, seed=42)
+    tree_test_df = test_df.sample(withReplacement=False, fraction=min(1.0, TREE_SAMPLE_FRAC), seed=42)
+    print(f"\n🌲 Tree models using sampled data: {TREE_SAMPLE_FRAC:.2f}")
+
 # -----------------------
 # Train Random Forest Regressor
 # -----------------------
@@ -148,15 +167,15 @@ if RUN_RF:
     rf = RandomForestRegressor(
         featuresCol="features",
         labelCol="pm25",
-        numTrees=50,
-        maxDepth=8,
-        maxBins=64,
+        numTrees=RF_NUM_TREES,
+        maxDepth=RF_MAX_DEPTH,
+        maxBins=RF_MAX_BINS,
         subsamplingRate=0.8,
         featureSubsetStrategy="auto",
         seed=42
     )
-    rf_model = rf.fit(train_df)
-    rf_predictions = rf_model.transform(test_df)
+    rf_model = rf.fit(tree_train_df)
+    rf_predictions = rf_model.transform(tree_test_df)
     rf_metrics = evaluate_metrics(rf_predictions)
     print(f"   RMSE: {rf_metrics['rmse']:.2f}")
     print(f"   MAE: {rf_metrics['mae']:.2f}")
@@ -181,14 +200,14 @@ if RUN_GBT:
     gbt = GBTRegressor(
         featuresCol="features",
         labelCol="pm25",
-        maxIter=50,
-        maxDepth=6,
+        maxIter=GBT_MAX_ITER,
+        maxDepth=GBT_MAX_DEPTH,
         stepSize=0.05,
         subsamplingRate=0.8,
         seed=42
     )
-    gbt_model = gbt.fit(train_df)
-    gbt_predictions = gbt_model.transform(test_df)
+    gbt_model = gbt.fit(tree_train_df)
+    gbt_predictions = gbt_model.transform(tree_test_df)
     gbt_metrics = evaluate_metrics(gbt_predictions)
     print(f"   RMSE: {gbt_metrics['rmse']:.2f}")
     print(f"   MAE: {gbt_metrics['mae']:.2f}")
