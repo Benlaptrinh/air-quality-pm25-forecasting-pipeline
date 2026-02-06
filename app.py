@@ -56,6 +56,7 @@ show_raw_tables = st.sidebar.checkbox("Show raw tables", value=False)
 max_pred_rows = st.sidebar.slider("Prediction rows", min_value=50, max_value=1000, value=200, step=50)
 enable_forecast = st.sidebar.checkbox("Enable next-hour PM2.5 forecast (t+1)", value=True)
 use_full_predictions = st.sidebar.checkbox("Use full predictions (slow)", value=False)
+pred_model = st.sidebar.selectbox("Predictions model", ["Linear Regression", "Random Forest", "GBT"])
 
 # -----------------------
 # Main

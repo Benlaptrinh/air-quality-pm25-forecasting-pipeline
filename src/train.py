@@ -1,23 +1,21 @@
+
 """
 Training Pipeline for PM2.5 Prediction
 - Uses time-based split (no data leakage)
-- Trains Linear Regression and Random Forest
+- Trains Linear Regression, Random Forest, GBT
 - Uses lag_1 to lag_24 features
 """
+import os
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 from pyspark.ml.feature import VectorAssembler
-from pyspark.ml.regression import LinearRegression
+from pyspark.ml.regression import LinearRegression, RandomForestRegressor, GBTRegressor
 from pyspark.ml.evaluation import RegressionEvaluator
 
 # -----------------------
 # Spark Session
 # -----------------------
-spark = SparkSession.builder \
-    .appName("PM25 Training Model") \
-    .master("local[*]") \
-    .config("spark.driver.bindAddress", "127.0.0.1") \
-    .getOrCreate()
+spark = SparkSession.builder     .appName("PM25 Training Model")     .master("local[*]")     .config("spark.driver.bindAddress", "127.0.0.1")     .getOrCreate()
 
 spark.sparkContext.setLogLevel("WARN")
 
@@ -27,7 +25,14 @@ spark.sparkContext.setLogLevel("WARN")
 INPUT_PATH = "data/processed/features"
 LR_MODEL_PATH = "models/pm25_lr_model"
 RF_MODEL_PATH = "models/pm25_rf_model"
+GBT_MODEL_PATH = "models/pm25_gbt_model"
 METRICS_PATH = "data/processed/model_metrics"
+PRED_LR_PATH = "data/processed/predictions"
+PRED_RF_PATH = "data/processed/predictions_rf"
+PRED_GBT_PATH = "data/processed/predictions_gbt"
+
+RUN_RF = os.getenv("RUN_RF", "1") != "0"
+RUN_GBT = os.getenv("RUN_GBT", "1") != "0"
 
 # -----------------------
 # Load feature data
@@ -42,7 +47,8 @@ print(f"   Total records: {df.count()}")
 # Features: hour, day_of_week, month, lag_1..lag_24
 feature_cols = ["hour", "day_of_week", "month"] + [f"lag_{i}" for i in range(1, 25)]
 
-print(f"\n🔧 Creating feature vector with {len(feature_cols)} features:")
+print(f"
+🔧 Creating feature vector with {len(feature_cols)} features:")
 print(f"   {feature_cols}")
 
 assembler = VectorAssembler(
@@ -55,7 +61,8 @@ df = assembler.transform(df)
 # -----------------------
 # Train / Test split (Time-Series based)
 # -----------------------
-print("\n⏰ Time-based split (no data leakage)...")
+print("
+⏰ Time-based split (no data leakage)...")
 
 # Sort by datetime and drop nulls
 df_sorted = df.orderBy("datetime").dropna()
@@ -78,13 +85,15 @@ test_df = df_sorted.filter(col("datetime") >= split_datetime)
 train_count = train_df.count()
 test_count = test_df.count()
 
-print(f"\n📊 Train/Test Split:")
+print(f"
+📊 Train/Test Split:")
 print(f"   Train: {train_count} records ({train_count/total_count*100:.1f}%)")
 print(f"   Test: {test_count} records ({test_count/total_count*100:.1f}%)")
 print(f"   Split datetime: {split_datetime}")
 
 # Check for class imbalance
-print(f"\n   Train date range: {train_df.select(col('datetime')).first()[0]}")
+print(f"
+   Train date range: {train_df.select(col('datetime')).first()[0]}")
 print(f"   Test date range: {test_df.select(col('datetime')).first()[0]}")
 
 
@@ -101,10 +110,22 @@ def evaluate_metrics(predictions, label_col="pm25"):
     return metrics
 
 
+def save_predictions(predictions, output_path):
+    result = predictions.select(
+        "datetime",
+        col("pm25").alias("actual_pm25"),
+        col("prediction").alias("predicted_pm25")
+    ).withColumnRenamed("datetime", "date")
+    result.write.mode("overwrite").parquet(output_path)
+
+
+metrics_rows = []
+
 # -----------------------
 # Train Linear Regression
 # -----------------------
-print("\n🚀 Training Linear Regression...")
+print("
+🚀 Training Linear Regression...")
 lr = LinearRegression(
     featuresCol="features",
     labelCol="pm25",
@@ -120,55 +141,115 @@ print(f"   MAE: {lr_metrics['mae']:.2f}")
 print(f"   R²: {lr_metrics['r2']:.4f}")
 
 # Save Linear Regression model
-print("\n💾 Saving Linear Regression model...")
+print("
+💾 Saving Linear Regression model...")
 lr_model.write().overwrite().save(LR_MODEL_PATH)
 print(f"   ✅ Linear Regression: {LR_MODEL_PATH}")
 
+# Save LR predictions (test set)
+save_predictions(lr_predictions, PRED_LR_PATH)
+print(f"   ✅ Predictions: {PRED_LR_PATH}")
+
+metrics_rows.append(("linear_regression", lr_metrics["rmse"], lr_metrics["mae"], lr_metrics["r2"]))
+
 # -----------------------
-# Train Random Forest Regressor (SKIPPED - Out of Memory)
+# Train Random Forest Regressor
 # -----------------------
-# print("\n🌲 Training Random Forest...")
-# rf = RandomForestRegressor(
-#     featuresCol="features",
-#     labelCol="pm25",
-#     numTrees=100,
-#     maxDepth=10,
-#     seed=42
-# )
-# rf_model = rf.fit(train_df)
-# rf_predictions = rf_model.transform(test_df)
-# rf_metrics = evaluate_metrics(rf_predictions)
-# print(f"   RMSE: {rf_metrics['rmse']:.2f}")
-# print(f"   MAE: {rf_metrics['mae']:.2f}")
-# print(f"   R²: {rf_metrics['r2']:.4f}")
+if RUN_RF:
+    print("
+🌲 Training Random Forest...")
+    rf = RandomForestRegressor(
+        featuresCol="features",
+        labelCol="pm25",
+        numTrees=50,
+        maxDepth=8,
+        maxBins=64,
+        subsamplingRate=0.8,
+        featureSubsetStrategy="auto",
+        seed=42
+    )
+    rf_model = rf.fit(train_df)
+    rf_predictions = rf_model.transform(test_df)
+    rf_metrics = evaluate_metrics(rf_predictions)
+    print(f"   RMSE: {rf_metrics['rmse']:.2f}")
+    print(f"   MAE: {rf_metrics['mae']:.2f}")
+    print(f"   R²: {rf_metrics['r2']:.4f}")
+
+    print("
+💾 Saving Random Forest model...")
+    rf_model.write().overwrite().save(RF_MODEL_PATH)
+    print(f"   ✅ Random Forest: {RF_MODEL_PATH}")
+
+    save_predictions(rf_predictions, PRED_RF_PATH)
+    print(f"   ✅ Predictions: {PRED_RF_PATH}")
+
+    metrics_rows.append(("random_forest", rf_metrics["rmse"], rf_metrics["mae"], rf_metrics["r2"]))
+else:
+    print("
+🌲 Random Forest skipped (RUN_RF=0)")
+
+# -----------------------
+# Train GBT Regressor
+# -----------------------
+if RUN_GBT:
+    print("
+🌟 Training GBT Regressor...")
+    gbt = GBTRegressor(
+        featuresCol="features",
+        labelCol="pm25",
+        maxIter=50,
+        maxDepth=6,
+        stepSize=0.05,
+        subsamplingRate=0.8,
+        seed=42
+    )
+    gbt_model = gbt.fit(train_df)
+    gbt_predictions = gbt_model.transform(test_df)
+    gbt_metrics = evaluate_metrics(gbt_predictions)
+    print(f"   RMSE: {gbt_metrics['rmse']:.2f}")
+    print(f"   MAE: {gbt_metrics['mae']:.2f}")
+    print(f"   R²: {gbt_metrics['r2']:.4f}")
+
+    print("
+💾 Saving GBT model...")
+    gbt_model.write().overwrite().save(GBT_MODEL_PATH)
+    print(f"   ✅ GBT Regressor: {GBT_MODEL_PATH}")
+
+    save_predictions(gbt_predictions, PRED_GBT_PATH)
+    print(f"   ✅ Predictions: {PRED_GBT_PATH}")
+
+    metrics_rows.append(("gbt_regression", gbt_metrics["rmse"], gbt_metrics["mae"], gbt_metrics["r2"]))
+else:
+    print("
+🌟 GBT Regressor skipped (RUN_GBT=0)")
 
 # -----------------------
 # Results Summary
 # -----------------------
-print("\n" + "=" * 60)
+print("
+" + "=" * 60)
 print("📊 MODEL RESULTS")
 print("=" * 60)
 print(f"{'Model':<25} {'RMSE':>10} {'MAE':>10} {'R²':>10}")
 print("-" * 60)
-print(f"{'Linear Regression':<25} {lr_metrics['rmse']:>10.2f} {lr_metrics['mae']:>10.2f} {lr_metrics['r2']:>10.4f}")
+for name, rmse, mae, r2 in metrics_rows:
+    print(f"{name:<25} {rmse:>10.2f} {mae:>10.2f} {r2:>10.4f}")
 print("=" * 60)
-print(f"🏆 Best Model: Linear Regression")
-print("\n💾 Saving models...")
-lr_model.write().overwrite().save(LR_MODEL_PATH)
-print(f"   Linear Regression: {LR_MODEL_PATH}")
 
-# Save metrics
-metrics_rows = [
-    ("linear_regression", lr_metrics["rmse"], lr_metrics["mae"], lr_metrics["r2"])
-]
-
-metrics_df = spark.createDataFrame(
-    metrics_rows,
-    ["model", "rmse", "mae", "r2"]
-)
+# Save metrics (merge with existing if any)
+metrics_df = spark.createDataFrame(metrics_rows, ["model", "rmse", "mae", "r2"])
+if os.path.exists(METRICS_PATH):
+    try:
+        old_df = spark.read.parquet(METRICS_PATH)
+        new_models = [row[0] for row in metrics_rows]
+        old_df = old_df.filter(~col("model").isin(new_models))
+        metrics_df = old_df.unionByName(metrics_df)
+    except Exception:
+        pass
 
 metrics_df.write.mode("overwrite").parquet(METRICS_PATH)
 print(f"   Metrics: {METRICS_PATH}")
 
-print("\n✅ TRAINING COMPLETE! (Random Forest skipped due to memory constraints)")
+print("
+✅ TRAINING COMPLETE!")
 spark.stop()
