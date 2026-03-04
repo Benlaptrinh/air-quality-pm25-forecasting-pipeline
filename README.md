@@ -1,4 +1,4 @@
-# AQI Big Data (PM2.5) Pipeline
+# Air Quality PM2.5 Forecasting Pipeline (Apache Spark)
 
 End-to-end Spark pipeline to ingest PM2.5 data, clean it, engineer time-series features, train a simple regression model, and run predictions.
 
@@ -118,5 +118,3 @@ Then run ETL, features, train, and predict again to refresh outputs.
 ```bash
 export SPARK_LOCAL_IP=127.0.0.1
 ```
-# Bigdata
-# Bigdata

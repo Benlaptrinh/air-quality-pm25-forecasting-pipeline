@@ -8,7 +8,7 @@ import streamlit as st
 # App Config
 # -----------------------
 st.set_page_config(
-    page_title="AQI Big Data Dashboard",
+    page_title="Air Quality PM2.5 Forecasting Dashboard",
     page_icon="AQI",
     layout="wide",
 )
@@ -52,7 +52,7 @@ WEEKDAY_ORDER = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 # -----------------------
 # Sidebar
 # -----------------------
-st.sidebar.header("AQI PM2.5 Demo")
+st.sidebar.header("Air Quality PM2.5 Demo")
 show_raw_tables = st.sidebar.checkbox("Show raw tables", value=False)
 max_pred_rows = st.sidebar.slider("Prediction rows", min_value=50, max_value=1000, value=200, step=50)
 enable_forecast = st.sidebar.checkbox("Enable next-hour PM2.5 forecast (t+1)", value=True)
@@ -62,7 +62,7 @@ pred_model = st.sidebar.selectbox("Predictions model", ["Linear Regression", "Ra
 # -----------------------
 # Main
 # -----------------------
-st.title("AQI Big Data (PM2.5) Dashboard")
+st.title("Air Quality PM2.5 Forecasting Dashboard")
 st.caption("Spark pipeline outputs: EDA trends, model metrics, predictions")
 
 # -----------------------
